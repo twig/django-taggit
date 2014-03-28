@@ -1,7 +1,9 @@
 import django
 from django.contrib.contenttypes.models import ContentType
+from django.db.models.aggregates import Count
 from django.contrib.contenttypes.generic import GenericForeignKey
 from django.db import models, IntegrityError, transaction
+from django.db.models.query import QuerySet
 from django.template.defaultfilters import slugify as default_slugify
 from django.utils.translation import ugettext_lazy as _, ugettext
 
@@ -49,6 +51,57 @@ class TagBase(models.Model):
         if i is not None:
             slug += "_%d" % i
         return slug
+    
+    
+    @classmethod
+    def get_for(cls, queryset):
+        """
+        Returns a list of tags used in the given queryset.
+        TODO: make it support models
+        """
+        ct = ContentType.objects.get_for_model(queryset.model)
+        return cls.objects.filter(pk__in = TaggedItem.objects.filter(content_type = ct, object_id__in = queryset).values_list('tag', flat = True).distinct())
+    
+    
+    @classmethod
+    def get_for_with_count(cls, queryset, order_by = None, limit = None):
+        """
+        Returns a list of tags used in the given queryset paired with the number of times it's used.
+        [
+            { 'tag': tagObject, 'count': 4, },
+            ...
+        ]
+        
+        @param order_by: tuple A list of strings to order the result by, used by QuerySet.order_by()
+        
+        @return: A list of ordered tags, containing dictionaries of count.
+        """
+        ct = ContentType.objects.get_for_model(queryset.model)
+        tagged_items = TaggedItem.objects.filter(content_type = ct, object_id__in = queryset).order_by('tag').values('tag').distinct()
+        tagged_items = tagged_items.annotate(count = Count('tag'))
+        
+        # Limit the number of results if necessary
+        if limit:
+            tagged_items = tagged_items[:limit]
+
+        tag_ids = [ x['tag'] for x in tagged_items ]
+        counts = dict([ (x['tag'], x['count']) for x in tagged_items ])
+        
+        tags = cls.objects.filter(pk__in = tag_ids).order_by('name')
+        
+        if order_by:
+            tags = tags.order_by(*order_by)
+        
+        # Generate the list to return
+        result = [
+            {
+                'tag': tag,
+                'count': counts[tag.pk],
+            }
+            for tag in tags
+        ]
+
+        return result
 
 
 class Tag(TagBase):
@@ -137,11 +190,18 @@ class GenericTaggedItemBase(ItemBase):
 
     @classmethod
     def bulk_lookup_kwargs(cls, instances):
-        # TODO: instances[0], can we assume there are instances.
-        return {
-            "object_id__in": [instance.pk for instance in instances],
-            "content_type": ContentType.objects.get_for_model(instances[0]),
-        }
+        if isinstance(instances, QuerySet):
+            # Can do a real object_id IN (SELECT ..) query.
+            return {
+                "object_id__in": instances,
+                "content_type": ContentType.objects.get_for_model(instances.model),
+            }
+        else:
+            # TODO: instances[0], can we assume there are instances.
+            return {
+                "object_id__in": [instance.pk for instance in instances],
+                "content_type": ContentType.objects.get_for_model(instances[0]),
+            }
 
     @classmethod
     def tags_for(cls, model, instance=None):
