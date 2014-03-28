@@ -181,15 +181,15 @@ class TaggableManager(RelatedField, Field):
     def bulk_related_objects(self, new_objs, using):
         return []
 
-    def extra_filters(self, pieces, pos, negate):
-        if negate or not self.use_gfk:
-            return []
-        prefix = "__".join(["tagged_items"] + pieces[:pos-2])
-        get = ContentType.objects.get_for_model
-        cts = [get(obj) for obj in _get_subclasses(self.model)]
-        if len(cts) == 1:
-            return [("%s__content_type" % prefix, cts[0])]
-        return [("%s__content_type__in" % prefix, cts)]
+#    def extra_filters(self, pieces, pos, negate):
+#        if negate or not self.use_gfk:
+#            return []
+#        prefix = "__".join(["tagged_items"] + pieces[:pos-2])
+#        get = ContentType.objects.get_for_model
+#        cts = [get(obj) for obj in _get_subclasses(self.model)]
+#        if len(cts) == 1:
+#            return [("%s__content_type" % prefix, cts[0])]
+#        return [("%s__content_type__in" % prefix, cts)]
 
     def get_extra_join_sql(self, connection, qn, lhs_alias, rhs_alias):
         model_name = _model_name(self.through)
