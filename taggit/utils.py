@@ -1,5 +1,6 @@
 from django.utils.encoding import force_unicode
 from django.utils.functional import wraps
+from django.template.defaultfilters import slugify
 
 
 def parse_tags(tagstring):
@@ -124,3 +125,12 @@ def require_instance_manager(func):
             raise TypeError("Can't call %s with a non-instance manager" % func.__name__)
         return func(self, *args, **kwargs)
     return inner
+
+
+
+def slugify_tags_list(tags):
+    """
+    Takes in a list of tag names and returns a list of slugified names.
+    Useful for queries like .filter(taggit__slug__in = slugify_tags_list(["Cloud Services", "Enterprise Management", "etc"]))
+    """
+    return [ slugify(tag) for tag in tags ]
