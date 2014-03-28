@@ -1,4 +1,5 @@
-import django
+from __future__ import unicode_literals
+
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.aggregates import Count
 from django.contrib.contenttypes.generic import GenericForeignKey
@@ -6,13 +7,15 @@ from django.db import models, IntegrityError, transaction
 from django.db.models.query import QuerySet
 from django.template.defaultfilters import slugify as default_slugify
 from django.utils.translation import ugettext_lazy as _, ugettext
+from django.utils.encoding import python_2_unicode_compatible
 
 
+@python_2_unicode_compatible
 class TagBase(models.Model):
-    name = models.CharField(verbose_name=_('Name'), max_length=100)
+    name = models.CharField(verbose_name=_('Name'), unique=True, max_length=100)
     slug = models.SlugField(verbose_name=_('Slug'), unique=True, max_length=100)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
     class Meta:
@@ -21,17 +24,14 @@ class TagBase(models.Model):
     def save(self, *args, **kwargs):
         if not self.pk and not self.slug:
             self.slug = self.slugify(self.name)
-            if django.VERSION >= (1, 2):
-                from django.db import router
-                using = kwargs.get("using") or router.db_for_write(
-                    type(self), instance=self)
-                # Make sure we write to the same db for all attempted writes,
-                # with a multi-master setup, theoretically we could try to
-                # write and rollback on different DBs
-                kwargs["using"] = using
-                trans_kwargs = {"using": using}
-            else:
-                trans_kwargs = {}
+            from django.db import router
+            using = kwargs.get("using") or router.db_for_write(
+                type(self), instance=self)
+            # Make sure we write to the same db for all attempted writes,
+            # with a multi-master setup, theoretically we could try to
+            # write and rollback on different DBs
+            kwargs["using"] = using
+            trans_kwargs = {"using": using}
             i = 0
             while True:
                 i += 1
@@ -110,9 +110,9 @@ class Tag(TagBase):
         verbose_name_plural = _("Tags")
 
 
-
+@python_2_unicode_compatible
 class ItemBase(models.Model):
-    def __unicode__(self):
+    def __str__(self):
         return ugettext("%(object)s tagged with %(tag)s") % {
             "object": self.content_object,
             "tag": self.tag
@@ -143,10 +143,7 @@ class ItemBase(models.Model):
 
 
 class TaggedItemBase(ItemBase):
-    if django.VERSION < (1, 2):
-        tag = models.ForeignKey(Tag, related_name="%(class)s_items")
-    else:
-        tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items")
+    tag = models.ForeignKey(Tag, related_name="%(app_label)s_%(class)s_items")
 
     class Meta:
         abstract = True
@@ -164,18 +161,11 @@ class TaggedItemBase(ItemBase):
 
 class GenericTaggedItemBase(ItemBase):
     object_id = models.IntegerField(verbose_name=_('Object id'), db_index=True)
-    if django.VERSION < (1, 2):
-        content_type = models.ForeignKey(
-            ContentType,
-            verbose_name=_('Content type'),
-            related_name="%(class)s_tagged_items"
-        )
-    else:
-        content_type = models.ForeignKey(
-            ContentType,
-            verbose_name=_('Content type'),
-            related_name="%(app_label)s_%(class)s_tagged_items"
-        )
+    content_type = models.ForeignKey(
+        ContentType,
+        verbose_name=_('Content type'),
+        related_name="%(app_label)s_%(class)s_tagged_items"
+    )
     content_object = GenericForeignKey()
 
     class Meta:
