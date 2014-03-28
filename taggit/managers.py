@@ -11,6 +11,8 @@ from django.db.models.related import RelatedObject
 from django.utils.text import capfirst
 from django.utils.translation import ugettext_lazy as _
 from django.utils import six
+from django.conf import settings
+from django.utils.encoding import force_unicode
 
 try:
     from django.db.models.related import PathInfo
@@ -331,6 +333,10 @@ class _TaggableManager(models.Manager):
 
     @require_instance_manager
     def add(self, *tags):
+        if getattr(settings, 'TAGGIT_IGNORE_CASE', False):
+            return self.add_ignore_case(*tags)
+
+        # This is the default behaviour
         str_tags = set([
             t
             for t in tags
@@ -349,6 +355,54 @@ class _TaggableManager(models.Manager):
 
         for tag in tag_objs:
             self.through.objects.get_or_create(tag=tag, **self._lookup_kwargs())
+
+
+    @require_instance_manager
+    def add_ignore_case(self, *tags):
+        # No tags to add, don't bother
+        if len(tags) == 0:
+            return
+
+        tags = [ force_unicode(t) if not isinstance(t, self.through.tag_model()) else t for t in tags ]
+        str_tags = set([
+            t
+            for t in tags
+            if not isinstance(t, self.through.tag_model())
+        ])
+        tag_objs = set(tags) - str_tags
+        # If str_tags has 0 elements Django actually optimizes that to not do a
+        # query.  Malcolm is very smart.
+        
+        # Twig: Altering this to allow for case-insentive "__in"
+        existing = []
+        
+        if len(str_tags):
+            existing = self.through.tag_model().objects.all()
+            q = models.Q()
+
+            for str_tag in str_tags:
+                q |= models.Q(name__iexact = str_tag)
+
+            existing = existing.filter(q)
+            tag_objs.update(existing)
+        
+        # Reuse existing list by turning tags into strings
+        existing = set(t.name.lower() for t in existing)
+        tags_to_create = [ tag for tag in str_tags if (tag.lower() not in existing) and (tag.strip() != '') ]
+        
+        _created = []
+        #for new_tag in str_tags - set(t.name for t in existing):
+        for new_tag in tags_to_create:
+            
+            if new_tag.lower() in _created:
+                continue
+            
+            _created.append(new_tag.lower() )
+            tag_objs.add(self.through.tag_model().objects.create(name=new_tag))
+
+        for tag in tag_objs:
+            self.through.objects.get_or_create(tag=tag, **self._lookup_kwargs())
+
 
     @require_instance_manager
     def names(self):
