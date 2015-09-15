@@ -1,10 +1,18 @@
 from __future__ import unicode_literals
 
+from django import VERSION
 from django.utils import six
 from django.utils.encoding import force_text
 from django.utils.functional import wraps
 from django.template.defaultfilters import slugify
 
+
+
+def _get_field(model, name):
+    if VERSION < (1, 8):
+        return model._meta.get_field_by_name(name)[0]
+    else:
+        return model._meta.get_field(name)
 
 
 def parse_tags(tagstring):
