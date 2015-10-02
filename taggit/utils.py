@@ -5,6 +5,7 @@ from django.utils import six
 from django.utils.encoding import force_text
 from django.utils.functional import wraps
 from django.template.defaultfilters import slugify
+from django.conf import settings
 
 
 
@@ -20,6 +21,8 @@ def parse_tags(tagstring):
     Parses tag input, with multiple word input being activated and
     delineated by commas and double quotes. Quotes take precedence, so
     they may contain commas.
+    
+    Alternatively, ONLY support commas.
 
     Returns a sorted list of unique tag names.
 
@@ -30,6 +33,9 @@ def parse_tags(tagstring):
         return []
 
     tagstring = force_text(tagstring)
+
+    if getattr(settings,'TAGGIT_IGNORE_CASE', False):
+        return list(set(split_strip(tagstring, ',')))
 
     # Special case - if there are no commas or double quotes in the
     # input, we don't *do* a recall... I mean, we know we only need to
@@ -120,13 +126,23 @@ def edit_string_for_tags(tags):
     Ported from Jonathan Buchanan's `django-tagging
     <http://django-tagging.googlecode.com/>`_
     """
+    from models import Tag, TaggedItem
+
     names = []
+    
     for tag in tags:
-        name = tag.name
-        if ',' in name or ' ' in name:
-            names.append('"%s"' % name)
+        if isinstance(tag, Tag):
+            names.append(tag.name)
+        elif isinstance(tag, TaggedItem):
+            names.append(tag.tag.name)
         else:
-            names.append(name)
+            names.append(unicode(tag))
+
+#         name = tag.name
+#         if ',' in name or ' ' in name:
+#             names.append('"%s"' % name)
+#         else:
+#             names.append(name)
     return ', '.join(sorted(names))
 
 
